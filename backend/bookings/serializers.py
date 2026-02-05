@@ -9,7 +9,7 @@ class BookingSerializer(serializers.ModelSerializer):
     spot_number = serializers.CharField(source="spot.spot_number", read_only=True)
     facility_name = serializers.CharField(source="facility.name", read_only=True)
     duration = serializers.IntegerField(source="duration_minutes", read_only=True)
-    is_overstay = serializers.BooleanField(source="is_overstay", read_only=True)
+    is_overstay = serializers.BooleanField(read_only=True)
     
     class Meta:
         model = Booking
