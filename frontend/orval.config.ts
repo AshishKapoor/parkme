@@ -3,7 +3,7 @@ import { defineConfig } from "orval";
 export default defineConfig({
   parkme: {
     input: {
-      target: "http://localhost:8000/api/schema/",
+      target: "src/schema/park-me.yaml",
     },
     output: {
       mode: "tags-split",
