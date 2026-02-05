@@ -1,14 +1,5 @@
-import { useMemo, useRef, useState, type ReactNode } from "react";
-import { useForm } from "@tanstack/react-form";
-import type { FieldApi } from "@tanstack/react-form";
-import {
-  createColumnHelper,
-  type CellContext,
-  getCoreRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import type { VirtualItem } from "@tanstack/react-virtual";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,97 +12,82 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { apiBookingsList } from "@/api/generated/api/api";
+import { BookingStatusEnum } from "@/api/generated/schemas/bookingStatusEnum";
 
 type BookingRow = {
   id: string;
   driver: string;
   spot: string;
-  status: "active" | "completed" | "overdue";
+  status: BookingStatusEnum;
   start: string;
   duration: string;
 };
 
 type Filters = {
   query: string;
-  status: "all" | BookingRow["status"];
+  status: "all" | BookingStatusEnum;
 };
 
-type HeaderGroupShape = {
-  id: string;
-  headers: Array<{
-    id: string;
-    isPlaceholder: boolean;
-    column: {
-      columnDef: {
-        header?: ReactNode;
-      };
-    };
-  }>;
-};
-
-type RowShape = {
-  id: string;
-  getVisibleCells: () => Array<{
-    id: string;
-    getValue: () => unknown;
-  }>;
-};
-
-const columnHelper = createColumnHelper<BookingRow>();
-
-const columns = [
-  columnHelper.accessor("id", {
-    header: "Booking ID",
-    cell: (info: CellContext<BookingRow, string>) => info.getValue(),
-  }),
-  columnHelper.accessor("driver", {
-    header: "Driver",
-    cell: (info: CellContext<BookingRow, string>) => info.getValue(),
-  }),
-  columnHelper.accessor("spot", {
-    header: "Spot",
-    cell: (info: CellContext<BookingRow, string>) => info.getValue(),
-  }),
-  columnHelper.accessor("status", {
-    header: "Status",
-    cell: (info: CellContext<BookingRow, BookingRow["status"]>) =>
-      info.getValue(),
-  }),
-  columnHelper.accessor("start", {
-    header: "Start",
-    cell: (info: CellContext<BookingRow, string>) => info.getValue(),
-  }),
-  columnHelper.accessor("duration", {
-    header: "Duration",
-    cell: (info: CellContext<BookingRow, string>) => info.getValue(),
-  }),
+const tableHeaders = [
+  "Booking ID",
+  "Driver",
+  "Spot",
+  "Status",
+  "Start",
+  "Duration",
 ];
 
-const baseData: BookingRow[] = Array.from({ length: 120 }).map((_, index) => ({
-  id: `BK-${1000 + index}`,
-  driver: index % 2 === 0 ? "Avery Park" : "Jordan Lane",
-  spot: `L-${(index % 18) + 1}`,
-  status:
-    index % 3 === 0 ? "overdue" : index % 2 === 0 ? "active" : "completed",
-  start: `Feb 05, 2026 · ${8 + (index % 8)}:00`,
-  duration: `${45 + (index % 5) * 15}m`,
-}));
+const statusOptions: Array<{
+  label: string;
+  value: BookingStatusEnum | "all";
+}> = [
+  { label: "All", value: "all" },
+  { label: "Pending", value: BookingStatusEnum.PENDING },
+  { label: "Confirmed", value: BookingStatusEnum.CONFIRMED },
+  { label: "Active", value: BookingStatusEnum.ACTIVE },
+  { label: "Completed", value: BookingStatusEnum.COMPLETED },
+  { label: "Cancelled", value: BookingStatusEnum.CANCELLED },
+  { label: "No show", value: BookingStatusEnum.NO_SHOW },
+];
+
+const formatDateTime = (value: unknown) => {
+  if (!value) return "—";
+  const date = value instanceof Date ? value : new Date(value as string);
+  if (Number.isNaN(date.getTime())) {
+    return "—";
+  }
+  return date.toLocaleString();
+};
 
 export function BookingsPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
     status: "all",
   });
+  const [draftFilters, setDraftFilters] = useState<Filters>({
+    query: "",
+    status: "all",
+  });
 
-  const form = useForm<Filters>({
-    defaultValues: filters,
-    onSubmit: async ({ value }: { value: Filters }) => {
-      setFilters(value);
-    },
+  const bookingsQuery = useQuery({
+    queryKey: ["bookings", filters],
+    queryFn: () => apiBookingsList(),
+    staleTime: 30_000,
   });
 
   const data = useMemo(() => {
-    return baseData.filter((row) => {
+    const rows: BookingRow[] =
+      bookingsQuery.data?.data?.results.map((booking) => ({
+        id: booking.ticket_number ?? booking.id,
+        driver: booking.user_email ?? booking.user,
+        spot: booking.spot_number ?? booking.spot,
+        status: booking.status ?? BookingStatusEnum.PENDING,
+        start: formatDateTime(booking.entry_time),
+        duration: `${booking.duration}m`,
+      })) ?? [];
+
+    return rows.filter((row) => {
       const matchesQuery =
         filters.query.length === 0 ||
         row.driver.toLowerCase().includes(filters.query.toLowerCase()) ||
@@ -120,24 +96,9 @@ export function BookingsPage() {
         filters.status === "all" || row.status === filters.status;
       return matchesQuery && matchesStatus;
     });
-  }, [filters]);
+  }, [bookingsQuery.data, filters]);
 
-  const table = useReactTable<BookingRow>({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  const parentRef = useRef<HTMLDivElement>(null);
-  const rows = table.getRowModel().rows as RowShape[];
-  const headerGroups = table.getHeaderGroups() as HeaderGroupShape[];
-
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 48,
-    overscan: 8,
-  });
+  const rows = data;
 
   return (
     <div className="space-y-6">
@@ -157,40 +118,41 @@ export function BookingsPage() {
             className="flex flex-col gap-4 md:flex-row md:items-end"
             onSubmit={(event) => {
               event.preventDefault();
-              void form.handleSubmit();
+              setFilters(draftFilters);
             }}
           >
-            <form.Field
-              name="query"
-              children={(field: FieldApi<Filters, "query">) => (
-                <div className="flex-1 space-y-2">
-                  <label className="text-sm font-medium">Search</label>
-                  <Input
-                    placeholder="Search by driver or booking ID"
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                  />
-                </div>
-              )}
-            />
-            <form.Field
-              name="status"
-              children={(field: FieldApi<Filters, "status">) => (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Status</label>
-                  <select
-                    className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                    value={field.state.value}
-                    onChange={(event) => field.handleChange(event.target.value)}
-                  >
-                    <option value="all">All</option>
-                    <option value="active">Active</option>
-                    <option value="completed">Completed</option>
-                    <option value="overdue">Overdue</option>
-                  </select>
-                </div>
-              )}
-            />
+            <div className="flex-1 space-y-2">
+              <label className="text-sm font-medium">Search</label>
+              <Input
+                placeholder="Search by driver or booking ID"
+                value={draftFilters.query}
+                onChange={(event) =>
+                  setDraftFilters((previous) => ({
+                    ...previous,
+                    query: event.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <select
+                className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+                value={draftFilters.status}
+                onChange={(event) =>
+                  setDraftFilters((previous) => ({
+                    ...previous,
+                    status: event.target.value as Filters["status"],
+                  }))
+                }
+              >
+                {statusOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <Button type="submit">Apply</Button>
           </form>
         </CardContent>
@@ -201,52 +163,36 @@ export function BookingsPage() {
           <CardTitle>Recent sessions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div
-            ref={parentRef}
-            className="max-h-[420px] overflow-auto rounded-md border"
-          >
+          <div className="max-h-[420px] overflow-auto rounded-md border">
             <Table>
               <TableHeader>
-                {headerGroups.map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <TableHead key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : header.column.columnDef.header}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
+                <TableRow>
+                  {tableHeaders.map((header) => (
+                    <TableHead key={header}>{header}</TableHead>
+                  ))}
+                </TableRow>
               </TableHeader>
-              <TableBody
-                style={{
-                  height: rowVirtualizer.getTotalSize(),
-                  position: "relative",
-                }}
-              >
-                {rowVirtualizer
-                  .getVirtualItems()
-                  .map((virtualRow: VirtualItem) => {
-                    const row = rows[virtualRow.index];
-                    return (
-                      <TableRow
-                        key={row.id}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          transform: `translateY(${virtualRow.start}px)`,
-                          width: "100%",
-                        }}
-                      >
-                        {row.getVisibleCells().map((cell) => (
-                          <TableCell key={cell.id}>
-                            {cell.getValue() as string}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    );
-                  })}
+              <TableBody>
+                {rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={tableHeaders.length}>
+                      {bookingsQuery.isLoading
+                        ? "Loading bookings..."
+                        : "No bookings found."}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>{row.id}</TableCell>
+                      <TableCell>{row.driver}</TableCell>
+                      <TableCell>{row.spot}</TableCell>
+                      <TableCell>{row.status}</TableCell>
+                      <TableCell>{row.start}</TableCell>
+                      <TableCell>{row.duration}</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>

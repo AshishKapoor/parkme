@@ -2,16 +2,20 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { to: "/", label: "Dashboard" },
   { to: "/map", label: "Parking Map" },
+  { to: "/parking", label: "Parking Management" },
   { to: "/bookings", label: "Bookings" },
   { to: "/pricing", label: "Pricing" },
   { to: "/analytics", label: "Analytics" },
 ];
 
 export function AppShell() {
+  const { logout } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -25,8 +29,8 @@ export function AppShell() {
               <p className="text-xs text-muted-foreground">Monolith Console</p>
             </div>
           </div>
-          <Button size="sm" variant="outline">
-            Sync Data
+          <Button size="sm" variant="outline" onClick={() => logout()}>
+            Sign out
           </Button>
         </div>
       </header>

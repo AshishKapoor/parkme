@@ -1,31 +1,76 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const stats = [
-  { label: "Active lots", value: "24", delta: "+2 today" },
-  { label: "Occupied spots", value: "1,248", delta: "+6%" },
-  { label: "Open tickets", value: "38", delta: "-12%" },
-  { label: "Revenue", value: "$12.4k", delta: "+9%" },
-];
+import { apiBookingsList, apiFacilitiesList } from "@/api/generated/api/api";
+import { BookingStatusEnum } from "@/api/generated/schemas/bookingStatusEnum";
 
 export function DashboardPage() {
-  const apiBaseUrl =
-    import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-  const { isLoading, isError } = useQuery({
-    queryKey: ["api-status"],
-    queryFn: async () => {
-      const response = await fetch(`${apiBaseUrl}/api/schema/`);
-      if (!response.ok) {
-        throw new Error("API unavailable");
-      }
-      return response.json();
-    },
+  const facilitiesQuery = useQuery({
+    queryKey: ["facilities"],
+    queryFn: () => apiFacilitiesList(),
     staleTime: 60_000,
   });
 
-  const apiStatus = isLoading ? "Checking" : isError ? "Offline" : "Connected";
+  const bookingsQuery = useQuery({
+    queryKey: ["bookings"],
+    queryFn: () => apiBookingsList(),
+    staleTime: 30_000,
+  });
+
+  const stats = useMemo(() => {
+    const facilities = facilitiesQuery.data?.data?.results ?? [];
+    const facilityCount =
+      facilitiesQuery.data?.data?.count ?? facilities.length;
+    const totalSpots = facilities.reduce(
+      (sum, facility) => sum + (facility.total_spots ?? 0),
+      0,
+    );
+    const availableSpots = facilities.reduce(
+      (sum, facility) => sum + (facility.available_spots ?? 0),
+      0,
+    );
+    const occupiedSpots = totalSpots - availableSpots;
+
+    const bookings = bookingsQuery.data?.data?.results ?? [];
+    const activeBookings = bookings.filter(
+      (booking) => booking.status === BookingStatusEnum.ACTIVE,
+    ).length;
+    const completedBookings = bookings.filter(
+      (booking) => booking.status === BookingStatusEnum.COMPLETED,
+    ).length;
+
+    return [
+      {
+        label: "Active facilities",
+        value: facilityCount.toLocaleString(),
+        delta: `${availableSpots.toLocaleString()} available spots`,
+      },
+      {
+        label: "Occupied spots",
+        value: occupiedSpots.toLocaleString(),
+        delta: `${availableSpots.toLocaleString()} open`,
+      },
+      {
+        label: "Active bookings",
+        value: activeBookings.toLocaleString(),
+        delta: `${completedBookings.toLocaleString()} completed`,
+      },
+      {
+        label: "Total bookings",
+        value: bookings.length.toLocaleString(),
+        delta: "Latest page of results",
+      },
+    ];
+  }, [bookingsQuery.data, facilitiesQuery.data]);
+
+  const apiStatus =
+    facilitiesQuery.isLoading || bookingsQuery.isLoading
+      ? "Checking"
+      : facilitiesQuery.isError || bookingsQuery.isError
+        ? "Offline"
+        : "Connected";
 
   return (
     <div className="space-y-6">
