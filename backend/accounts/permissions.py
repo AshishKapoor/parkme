@@ -73,7 +73,12 @@ class IsOwnerOrStaff(permissions.BasePermission):
         return (
             request.user and
             request.user.is_authenticated and
-            request.user.role in [UserRole.PARKING_OWNER, UserRole.PARKING_STAFF]
+            request.user.role
+            in [
+                UserRole.ADMIN,
+                UserRole.PARKING_OWNER,
+                UserRole.PARKING_STAFF,
+            ]
         )
 
 
