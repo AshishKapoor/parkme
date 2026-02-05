@@ -26,7 +26,9 @@ export function AppShell() {
             </div>
             <div>
               <p className="text-sm font-semibold leading-tight">ParkMe</p>
-              <p className="text-xs text-muted-foreground">Monolith Console</p>
+              <p className="text-xs text-muted-foreground">
+                Universal Parking Solution
+              </p>
             </div>
           </div>
           <Button size="sm" variant="outline" onClick={() => logout()}>
